@@ -90,7 +90,47 @@ server.port=8082
 spring.cloud.config.uri=http://localhost:8888
 spring.application.name=tradeapi
 ```
+- RestController Sample Code
+```Java
+@RestController
+public class AaaTradeRestController {
+	
+	@Autowired
+	aaaTradeRepository rep;
+	
+	@Value("${server.port}")
+	String port;
+	
+	@Autowired
+    private LoadBalancerClient loadBalancerClient;
+    private RestTemplate restTemplate = new RestTemplate();
+	
+	@GetMapping("/all")
+	public String getAll() {
+		List<AaaTradeModel> ll = rep.getAll();
+		System.out.println("Trade size "+ll.size());
+		return ll.toString();
+	}
+	@GetMapping("/other")
+	public String getother() {
+		System.out.println("=== From Trade:"+ port + " try to call other");
+		String ret = "Error";
+		try {
+			ret = restTemplate.getForObject(getOtherBaseUri()+"/all", String.class);
+		}
+		catch(Exception e) {
+			e.printStackTrace();
+		}
+		return ret;
+	}
+	
+	private String getOtherBaseUri(){
+        ServiceInstance serviceInstance =  loadBalancerClient.choose("USERAPI");
+        return serviceInstance.getUri().toString();
+    }
+}
 
+```
 
 
 
