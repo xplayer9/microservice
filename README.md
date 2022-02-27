@@ -27,7 +27,7 @@ spring.cloud.config.server.git.default-label = main
 @SpringBootApplication
 @EnableConfigServer
 ```
-- application.yml in git repo
+- "application.yml" in git repo
 ```Java
 my:
   greeting: This is greeting
@@ -61,3 +61,28 @@ management:
       exposure:
         include: info, health, mappings
 ```
+
+## Actuator and Devtools
+- Dependency
+```Java
+    <dependency>
+		    <groupId>org.springframework.boot</groupId>
+		    <artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-devtools</artifactId>
+			<optional>true</optional>
+		</dependency>
+```
+
+
+
+
+
+
+
+
+
+
+
