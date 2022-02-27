@@ -76,7 +76,20 @@ management:
 </dependency>
 ```
 
+## UserApi
 
+- Dependency: Web, Cloud, JPA, Config client, Eureka client, Lombok
+- Annotation
+```Java
+@SpringBootApplication
+@EnableEurekaClient
+```
+- application.properities
+```Java
+server.port=8082
+spring.cloud.config.uri=http://localhost:8888
+spring.application.name=tradeapi
+```
 
 
 
