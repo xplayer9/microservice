@@ -62,6 +62,38 @@ management:
         include: info, health, mappings
 ```
 
+## Gateway Server
+- Dependency: Web, Gateway
+- "application.yml"
+```Java
+server:
+  port: 8080
+  
+spring:
+  application:
+    name: gateway
+  cloud:
+    config:
+      uri: http://localhost:8888
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+      routes:
+        - id: USERAPI  #路由的ID，建議配合服務名
+          uri: lb://USERAPI # 匹配後提供服務的路由地址，lb代表從註冊中心獲取服務，且以負載均衡方式轉發
+          predicates:
+            - Path=/user/**
+          filters: # 加上StripPrefix=1，否則轉發到後端服務時會帶上consumer字首
+            - StripPrefix=1
+        - id: TRADEAPI  #路由的ID，建議配合服務名
+          uri: lb://TRADEAPI # 匹配後提供服務的路由地址，lb代表從註冊中心獲取服務，且以負載均衡方式轉發
+          predicates:
+            - Path=/trade/**
+          filters: # 加上StripPrefix=1，否則轉發到後端服務時會帶上consumer字首
+            - StripPrefix=1
+```
+
 ## Actuator and Devtools
 - Dependency
 ```Java
@@ -131,9 +163,6 @@ public class AaaTradeRestController {
 }
 
 ```
-
-
-
 
 
 
