@@ -6,7 +6,7 @@
 
 
 ## Eureka Server
-- Dependency: Web, Eureka Server
+- Key Dependency: Web, Eureka Server
 - application.properties
 ```Java
 server.port = 8761
@@ -20,7 +20,9 @@ eureka.client.fetchRegistry = false
 ```
 
 ## Config Server
-- Dependency: Web, Config Server
+- Utlize Git repo
+- Key Dependency: Web, Config Server
+
 - application.properties
 ```Java
 server.port = 8888
@@ -36,6 +38,11 @@ spring.cloud.config.server.git.default-label = main
 ```Java
 my:
   greeting: This is greeting
+  cookieName: cookieJWT
+  secretKey: mysecrect
+  keyDuration: 3600
+  header:
+    type: Authorization
   list:
     value: one, two , Five, Six, Seven, Eight
   
@@ -64,11 +71,15 @@ management:
   endpoints:
     web:
       exposure:
-        include: info, health, mappings
+        include: "*"
+  endpoint:
+    health:
+      show-details: always
 ```
 
 ## Gateway Server
-- Dependency: Web, Gateway
+- provides a flexible way of routing requests
+- Key Dependency: Web, WebFlux, Gateway
 - "application.yml"
 ```Java
 server:
@@ -85,18 +96,63 @@ spring:
         locator:
           enabled: true
       routes:
-        - id: USERAPI  #路由的ID，建議配合服務名
-          uri: lb://USERAPI # 匹配後提供服務的路由地址，lb代表從註冊中心獲取服務，且以負載均衡方式轉發
+        - id: USERAPI
+          uri: lb://USERAPI
           predicates:
             - Path=/user/**
-          filters: # 加上StripPrefix=1，否則轉發到後端服務時會帶上consumer字首
+          filters:
             - StripPrefix=1
-        - id: TRADEAPI  #路由的ID，建議配合服務名
-          uri: lb://TRADEAPI # 匹配後提供服務的路由地址，lb代表從註冊中心獲取服務，且以負載均衡方式轉發
+        - id: TRADEAPI
+          uri: lb://TRADEAPI
           predicates:
             - Path=/trade/**
           filters: # 加上StripPrefix=1，否則轉發到後端服務時會帶上consumer字首
             - StripPrefix=1
+```
+
+- Gateway Global Filter
+```Java
+@Component
+public class AuthFilter implements GlobalFilter, Ordered {
+	
+	@Value("${my.cookieName}")
+    private String COOKIE;
+	
+	@Value("${my.header.type}")
+	private String HEADER_KEY;
+
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        System.out.println("=== Global filter");
+        ServerHttpRequest req = exchange.getRequest();
+        ServerHttpResponse rsp = exchange.getResponse();
+        
+        //find JWT from cookie
+        MultiValueMap<String, HttpCookie> cookieMap = req.getCookies();
+        if(cookieMap.isEmpty() || !cookieMap.containsKey(COOKIE)){
+        	rsp.setStatusCode(HttpStatus.UNAUTHORIZED);
+        	
+        	String str = "Cookie not found " + COOKIE;
+        	byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
+          DataBuffer buffer = exchange.getResponse().bufferFactory().wrap(bytes);
+        	return rsp.writeWith(Flux.just(buffer));
+        }
+
+        //add JWT to following request header
+        HttpCookie token = cookieMap.getFirst(COOKIE);
+        return chain.filter(
+                exchange.mutate().request(
+                        req.mutate()
+                        .header(HEADER_KEY, "Bearer "+token.getValue())
+                        .build()).build());
+    }
+
+    @Override
+    public int getOrder() {
+        //The smaller the value, the more priority is given to execution
+        return 1;
+    }
+}
 ```
 
 ## Actuator and Devtools
@@ -114,8 +170,7 @@ spring:
 ```
 
 ## UserApi
-
-- Dependency: Web, Cloud, JPA, Config client, Eureka client, Lombok
+- Key Dependency: Web, Cloud, JPA, Config client, Eureka client, Lombok
 - Annotation
 ```Java
 @SpringBootApplication
