@@ -1,0 +1,26 @@
+server:
+  port: 8080
+  
+spring:
+  application:
+    name: gateway
+  cloud:
+    config:
+      uri: http://localhost:8888
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+      routes:
+        - id: USERAPI
+          uri: lb://USERAPI
+          predicates:
+            - Path=/user/**
+          filters:
+            - StripPrefix=1
+        - id: TRADEAPI
+          uri: lb://TRADEAPI
+          predicates:
+            - Path=/trade/**
+          filters: # 加上StripPrefix=1，否則轉發到後端服務時會帶上consumer字首
+            - StripPrefix=1
