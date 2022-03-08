@@ -369,5 +369,172 @@ public interface aaaUserRepository extends JpaRepository<aaaUserModel, Long> {
 }
 ```
 
+- Web Security Configuration
+```Java
+@EnableWebSecurity
+@EnableGlobalMethodSecurity(prePostEnabled = true)
+public class aaaUserSecurityConfiguration extends WebSecurityConfigurerAdapter {
+	
+	@Autowired
+    private UserDetailsService userDetailsService;
+	
+	@Autowired
+	private aaaUserSecurityFilter securityfilter;
+
+	@Override 
+	protected void configure(HttpSecurity http) throws Exception {
+		http
+        .authorizeRequests()
+        .antMatchers(HttpMethod.GET, "/login", "/logout", "signup").permitAll()
+        .anyRequest().authenticated()
+        .and()
+        .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+		.and()
+        .csrf().disable();
+		
+        http.formLogin().disable();
+	http.logout().disable();
+	http.addFilterBefore(securityfilter, UsernamePasswordAuthenticationFilter.class);
+		
+    }
+	
+	@Override
+	@Bean
+	public AuthenticationManager authenticationManagerBean() throws Exception {
+	    return super.authenticationManagerBean();
+	}
+	
+	@Override
+    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+		auth
+		.userDetailsService(userDetailsService)
+		.passwordEncoder(new BCryptPasswordEncoder());
+    }
+}
+```
+
+- Web Security Filter
+```Java
+@Component
+public class aaaUserSecurityFilter extends OncePerRequestFilter {
+	
+	@Value("${my.header.type}")
+	private String HEADER_KEY;
+
+    @Autowired
+    aaaUserDetailService userDetailsService;
+
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+            throws ServletException, IOException {
+
+    	//No token, no authentication
+    	if(request.getHeader(HEADER_KEY) == null) {
+    		System.out.println("=== No token, no authentication");
+    		chain.doFilter(request, response);
+    		return;
+    	}
+    	
+    	System.out.println("=== in Filter, doFilterInternal");
+    	
+    	//Remove "Bearer " substring
+        String jwtToken = request.getHeader(HEADER_KEY).substring(7);
+        String username = jwtUtil.extractUsername(jwtToken);
+ 
+        if(username != null) {
+        	if(SecurityContextHolder.getContext().getAuthentication() == null) {
+        		UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+        		
+	            if(jwtUtil.validateToken(jwtToken, userDetails)){
+	                UsernamePasswordAuthenticationToken token = new UsernamePasswordAuthenticationToken(
+	                        userDetails, null, userDetails.getAuthorities());
+	                token.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+	                SecurityContextHolder.getContext().setAuthentication(token);
+	            }
+        	}
+        }
+        chain.doFilter(request, response);
+    }
+}
+```
+
+- Define UserDetailService
+```Java
+@Service
+public class aaaUserDetailService implements UserDetailsService{
+	
+	@Autowired
+	aaaUserRepository rep;
+
+	@Override
+	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+
+			System.out.println("=== in UserDetailService, loadUserByUsername");
+            aaaUserModel dto = rep.findByUsername(username).get();
+            //set roles
+            List<GrantedAuthority> list = new ArrayList<GrantedAuthority>();
+            list.add(new SimpleGrantedAuthority(dto.getRoles()));
+            
+            return new User(dto.getUsername(), dto.getPassword(), list);
+	}
+}
+```
+
+- JWT Util
+```Java
+@Component
+public class JwtUtil {
+
+	@Value("${my.secretKey}")
+    private String SECRET_KEY;
+	
+	@Value("${my.keyDuration}")
+    private String DURATION;
+
+    public String extractUsername(String token) {
+        return extractClaim(token, Claims::getSubject);
+    }
+
+    public Date extractExpiration(String token) {
+        return extractClaim(token, Claims::getExpiration);
+    }
+
+    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
+        final Claims claims = extractAllClaims(token);
+        return claimsResolver.apply(claims);
+    }
+    private Claims extractAllClaims(String token) {
+        return Jwts.parser().setSigningKey(SECRET_KEY).parseClaimsJws(token).getBody();
+    }
+
+    private Boolean isTokenExpired(String token) {
+        return extractExpiration(token).before(new Date());
+    }
+
+    public String generateToken(UserDetails userDetails) {
+        Map<String, Object> claims = new HashMap<>();
+        return createToken(claims, userDetails.getUsername());
+    }
+
+    private String createToken(Map<String, Object> claims, String subject) {
+
+        return Jwts.builder().setClaims(claims).setSubject(subject).setIssuedAt(new Date(System.currentTimeMillis()))
+                .setExpiration(new Date(System.currentTimeMillis() + Integer.parseInt(DURATION)*1000))
+                .signWith(SignatureAlgorithm.HS256, SECRET_KEY).compact();
+    }
+
+    public Boolean validateToken(String token, UserDetails userDetails) {
+        final String username = extractUsername(token);
+        return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
+    }
+}
+
+```
+
+
+
 
 
