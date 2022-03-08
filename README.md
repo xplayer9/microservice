@@ -222,7 +222,7 @@ public class AuthFilter implements GatewayFilterFactory<AuthFilter.Config> {
 </dependency>
 ```
 
-## UserApi
+## Microservice sample: UserApi
 - Key Dependency: Web, Cloud, JPA, Config client, Eureka client, Lombok, jjwt, jaxb
 - Annotation
 ```Java
