@@ -1,4 +1,9 @@
-# Spring Boot Microservice
+# Spring Boot Microservices
+
+## High Level System Architecture
+
+<img width="799" alt="Screenshot01" src="https://user-images.githubusercontent.com/48862763/157296158-a41ef82a-ed7d-43fe-9f2f-f5b0de8e7dc3.png">
+
 
 ## Eureka Server
 - Dependency: Web, Eureka Server
