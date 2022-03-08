@@ -34,7 +34,7 @@ spring.cloud.config.server.git.default-label = main
 @SpringBootApplication
 @EnableConfigServer
 ```
-- "application.yml" in git repo
+- "application.yml" in Git repo
 ```Java
 my:
   greeting: This is greeting
@@ -154,6 +154,53 @@ public class AuthFilter implements GlobalFilter, Ordered {
     }
 }
 ```
+- Gateway Filter for reference
+```Java
+@Component
+public class AuthFilter implements GatewayFilterFactory<AuthFilter.Config> {
+
+	@Override
+	public GatewayFilter apply(Config config) {
+		return ((exchange, chain) -> {
+			
+			ServerHttpRequest req = exchange.getRequest();
+			ServerHttpResponse rsp = exchange.getResponse();
+			rsp.getHeaders().set(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
+			rsp.getHeaders().set("Access-Control-Allow-Origin", "*");
+			rsp.getHeaders().set("Cache-Control", "no-cache");
+			rsp.setStatusCode(HttpStatus.UNAUTHORIZED);
+			
+			System.out.println("=== getURI: " + req.getURI());
+			System.out.println("=== getPath: " + req.getPath());
+			System.out.println("=== getLocalAddress: " + req.getLocalAddress());
+			
+			String body = "Message to user";
+			DataBuffer buffer = null;
+			try {
+				buffer = rsp.bufferFactory().wrap(body.getBytes("UTF-8"));
+			} catch (UnsupportedEncodingException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			return chain.filter(exchange);
+            //return rsp.writeWith(Mono.just(buffer));
+		});
+	}
+
+	@Override
+	public Class<Config> getConfigClass() {
+		return Config.class;
+	}
+
+	@Override
+	public Config newConfig() {
+		Config c = new Config();
+		return c;
+	}
+
+	public static class Config {}
+}
+```
 
 ## Actuator and Devtools
 - Dependency
@@ -170,7 +217,7 @@ public class AuthFilter implements GlobalFilter, Ordered {
 ```
 
 ## UserApi
-- Key Dependency: Web, Cloud, JPA, Config client, Eureka client, Lombok
+- Key Dependency: Web, Cloud, JPA, Config client, Eureka client, Lombok, jjwt, jaxb
 - Annotation
 ```Java
 @SpringBootApplication
@@ -178,53 +225,149 @@ public class AuthFilter implements GlobalFilter, Ordered {
 ```
 - application.properities
 ```Java
-server.port=8082
+server.port=8081
 spring.cloud.config.uri=http://localhost:8888
-spring.application.name=tradeapi
+spring.cloud.config.enabled=true
+spring.cloud.config.discovery.enabled=true
+spring.application.name=userapi
 ```
 - RestController Sample Code
 ```Java
 @RestController
-public class AaaTradeRestController {
+public class aaaUserRestController {
 	
 	@Autowired
-	aaaTradeRepository rep;
+	aaaUserRepository rep;
 	
 	@Value("${server.port}")
 	String port;
 	
+	@Value("${my.cookieName}")
+    private String COOKIE;
+	
+	@Value("${my.keyDuration}")
+    private String DURATION;
+	
+	@Value("${my.header.type}")
+	private String HEADER_KEY;
+	
 	@Autowired
     private LoadBalancerClient loadBalancerClient;
     private RestTemplate restTemplate = new RestTemplate();
+    
+    @Autowired
+	private AuthenticationManager authenticationManager;
+
+	@Autowired
+	private JwtUtil jwtTokenUtil;
+
+	@Autowired
+	private aaaUserDetailService userDetailsService;
 	
+	@PreAuthorize("hasRole('USER')")
 	@GetMapping("/all")
-	public String getAll() {
-		List<AaaTradeModel> ll = rep.getAll();
-		System.out.println("Trade size "+ll.size());
+	public String getAll(HttpServletRequest req) {
+		List<aaaUserModel> ll = rep.findAll();
 		return ll.toString();
 	}
-	@GetMapping("/other")
-	public String getother() {
-		System.out.println("=== From Trade:"+ port + " try to call other");
-		String ret = "Error";
-		try {
-			ret = restTemplate.getForObject(getOtherBaseUri()+"/all", String.class);
-		}
-		catch(Exception e) {
-			e.printStackTrace();
-		}
-		return ret;
+	
+	@PreAuthorize("hasRole('ADMIN')")
+	@GetMapping("/admin")
+	public String getAdmin(HttpServletRequest req) {
+		return "This is Admin page";
 	}
 	
-	private String getOtherBaseUri(){
-        ServiceInstance serviceInstance =  loadBalancerClient.choose("USERAPI");
-        return serviceInstance.getUri().toString();
-    }
-}
+	@GetMapping("/logout")
+	public String getlogout(HttpServletResponse resp, HttpServletRequest req) {
+		Cookie[] arry = req.getCookies();
+		for(Cookie c:arry) {
+			if(c.getName().equals(COOKIE)) {
+				System.out.println("=== Cookie found!!!");
+				c.setMaxAge(0);
+				c.setDomain("localhost");
+				c.setPath("/");
+				resp.addCookie(c);
+				break;
+			}
+		}
+		return "Logout Successfully";
+	}
+	
+	@GetMapping("/exist")
+	public Boolean exist(@RequestParam String name) {
+		Boolean found = rep.existByName(name);
+		System.out.println("=== found user:"+name +" "+ found);
+		return found;
+	}
+	
+	
+	@GetMapping("/login")
+	public String userlogin(HttpServletResponse resp, @RequestParam Map<String, String> map) {
+		System.out.println("=== user login");
+		String username = map.getOrDefault("name", "");
+		String pwd = map.getOrDefault("pwd", "");
+		if(username.length()==0 || pwd.length()==0)
+			return "Username or Password cannot be empty!!!";
+		
+		try {
+			authenticationManager.authenticate(
+				new UsernamePasswordAuthenticationToken(username, pwd));
+		}
+		catch (InternalAuthenticationServiceException e) {
+			return "Username not found";
+		}
+		catch (BadCredentialsException e) {
+			return "Incorrect password";
+		}
+		catch (Exception e) {
+			return "Login FAIL, unknown errors";
+		}
 
+		UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+		String jwt = jwtTokenUtil.generateToken(userDetails);
+		Cookie cookie = new Cookie(COOKIE, jwt);
+        cookie.setMaxAge(Integer.parseInt(DURATION));
+		resp.addCookie(cookie);
+		return "Login Successfully !!!";
+	}
+}
+```
+- Data Model sample code
+```Java
+@Entity
+@Data
+@Table(name="`users`")
+public class aaaUserModel {
+	@Id
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    @Column(name="id")
+    private Long id;
+	
+	@Column(name="username")
+    private String username;
+    
+	@Column(name="password")
+    private String password;
+	
+	@Column(name="roles")
+    private String roles;
+}
 ```
 
+- Repository sample code
+```Java
+@Repository
+public interface aaaUserRepository extends JpaRepository<aaaUserModel, Long> {
 
+    Optional<aaaUserModel> findByUsername(String username);
+	
+    @Query(value="select exists(select 1 from users where username = :name)", nativeQuery=true)
+    Boolean existByName(String name);
+	
+    //@Query(value="select * from inventory a where a.item = :item", nativeQuery=true)
+    //List<shopModel> getItem(String item);
+}
+```
 
 
 
