@@ -2,7 +2,8 @@
 
 # High Level System Architecture
 
-<img width="799" alt="Screenshot01" src="https://user-images.githubusercontent.com/48862763/157296158-a41ef82a-ed7d-43fe-9f2f-f5b0de8e7dc3.png">
+<img width="790" alt="Screenshot03" src="https://user-images.githubusercontent.com/48862763/157563209-02321dd1-4767-458b-b04c-3fd079e8e42b.png">
+
 
 # High Level Cloud Security Flow
 
