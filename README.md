@@ -1,14 +1,24 @@
-# SpringBoot Microservices -- Stock Price System(Real Time Quoto and Historical Price)
+# SpringBoot Microservices -- Stock Price Services (Real Time Quoto and Historical Price)
+
+# Technology
+  - SpringBoot Architecture
+  - Spring API Gateway
+  - Configuration Server
+  - Eureka Serivce Discovery Server
+  - Kafka Message Queue
+  - Spring Cloud Security JWT
+  - Resilience4J Circuit Braker
+  - DataBase: JPA, PostgreSQL
+  - Development tools: Dev package, Lombok
+  - Frontend: Thymeleaf, Webjar
 
 # High Level System Architecture
 
 <img width="790" alt="Screenshot03" src="https://user-images.githubusercontent.com/48862763/157563209-02321dd1-4767-458b-b04c-3fd079e8e42b.png">
 
-
 # High Level Cloud Security Flow
 
 <img width="789" alt="Screenshot02" src="https://user-images.githubusercontent.com/48862763/157300306-1c11a2ce-f356-4803-b6f8-5b2481c99146.png">
-
 
 # Spring Cloud Components
 
