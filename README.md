@@ -101,8 +101,9 @@ resilience4j.circuitbreaker:
 ```
 
 ## Gateway Server
-- provides a flexible way of routing requests
-- Key Dependency: Web, WebFlux, Gateway
+- Purpose: provides a flexible way of routing requests
+- Key Dependency: Web, WebFlux, Gateway, Eureka Client
+- Support GatewayFilter and GolbalFilter
 - "application.yml"
 ```Java
 server:
@@ -129,103 +130,23 @@ spring:
           uri: lb://TRADEAPI
           predicates:
             - Path=/trade/**
-          filters: # 加上StripPrefix=1，否則轉發到後端服務時會帶上consumer字首
+          filters:
+            - StripPrefix=1
+        - id: STOCKAPI
+          uri: lb://STOCKAPI
+          predicates:
+            - Path=/stock/**
+          filters:
+            - StripPrefix=1
+        - id: DBAPI
+          uri: lb://DBAPI
+          predicates:
+            - Path=/db/**
+          filters:
             - StripPrefix=1
 ```
 
-- Gateway Global Filter
-```Java
-@Component
-public class AuthFilter implements GlobalFilter, Ordered {
-	
-	@Value("${my.cookieName}")
-    private String COOKIE;
-	
-	@Value("${my.header.type}")
-	private String HEADER_KEY;
-
-    @Override
-    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        System.out.println("=== Global filter");
-        ServerHttpRequest req = exchange.getRequest();
-        ServerHttpResponse rsp = exchange.getResponse();
-        
-        //find JWT from cookie
-        MultiValueMap<String, HttpCookie> cookieMap = req.getCookies();
-        if(cookieMap.isEmpty() || !cookieMap.containsKey(COOKIE)){
-        	rsp.setStatusCode(HttpStatus.UNAUTHORIZED);
-        	
-        	String str = "Cookie not found " + COOKIE;
-        	byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
-          DataBuffer buffer = exchange.getResponse().bufferFactory().wrap(bytes);
-        	return rsp.writeWith(Flux.just(buffer));
-        }
-
-        //add JWT to following request header
-        HttpCookie token = cookieMap.getFirst(COOKIE);
-        return chain.filter(
-                exchange.mutate().request(
-                        req.mutate()
-                        .header(HEADER_KEY, "Bearer "+token.getValue())
-                        .build()).build());
-    }
-
-    @Override
-    public int getOrder() {
-        //The smaller the value, the more priority is given to execution
-        return 1;
-    }
-}
-```
-- Gateway Filter for reference
-```Java
-@Component
-public class AuthFilter implements GatewayFilterFactory<AuthFilter.Config> {
-
-	@Override
-	public GatewayFilter apply(Config config) {
-		return ((exchange, chain) -> {
-			
-			ServerHttpRequest req = exchange.getRequest();
-			ServerHttpResponse rsp = exchange.getResponse();
-			rsp.getHeaders().set(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
-			rsp.getHeaders().set("Access-Control-Allow-Origin", "*");
-			rsp.getHeaders().set("Cache-Control", "no-cache");
-			rsp.setStatusCode(HttpStatus.UNAUTHORIZED);
-			
-			System.out.println("=== getURI: " + req.getURI());
-			System.out.println("=== getPath: " + req.getPath());
-			System.out.println("=== getLocalAddress: " + req.getLocalAddress());
-			
-			String body = "Message to user";
-			DataBuffer buffer = null;
-			try {
-				buffer = rsp.bufferFactory().wrap(body.getBytes("UTF-8"));
-			} catch (UnsupportedEncodingException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-			return chain.filter(exchange);
-            //return rsp.writeWith(Mono.just(buffer));
-		});
-	}
-
-	@Override
-	public Class<Config> getConfigClass() {
-		return Config.class;
-	}
-
-	@Override
-	public Config newConfig() {
-		Config c = new Config();
-		return c;
-	}
-
-	public static class Config {}
-}
-```
-
-## Actuator and Devtools
+## Actuator, Devtools, Lombok, Gson
 - Dependency
 ```Java
 <dependency>
@@ -236,6 +157,15 @@ public class AuthFilter implements GatewayFilterFactory<AuthFilter.Config> {
 	<groupId>org.springframework.boot</groupId>
 	<artifactId>spring-boot-devtools</artifactId>
 	<optional>true</optional>
+</dependency>
+<dependency>
+	<groupId>org.projectlombok</groupId>
+	<artifactId>lombok</artifactId>
+	<optional>true</optional>
+</dependency>
+<dependency>
+    <groupId>com.google.code.gson</groupId>
+    <artifactId>gson</artifactId>
 </dependency>
 ```
 
