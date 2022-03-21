@@ -10,7 +10,7 @@
   - Resilience4J Circuit Braker
   - DataBase: JPA, PostgreSQL
   - Development tools: Dev package, Lombok
-  - Frontend: Thymeleaf, Webjar
+  - Frontend library: Thymeleaf, Webjar
 
 # High Level System Architecture
 
