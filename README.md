@@ -188,4 +188,7 @@ spring:
 - Utlize UserApi for JWT Authentication and Authorization
 - Key Dependency: Web, Cloud, JPA, Config client, Eureka client, Lombok
 
+# Functional Diagram
+
+<img width="725" alt="Screenshot05" src="https://user-images.githubusercontent.com/48862763/159364270-42a4e261-1ada-466d-8a33-a54d0dbcae72.png">
 
