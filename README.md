@@ -9,7 +9,7 @@
   - Spring Cloud Security JWT
   - Resilience4J Circuit Braker
   - DataBase: JPA, PostgreSQL
-  - Development tools: Dev package, Lombok
+  - Development tools: Dev package, Lombok, Docker, Actuator
   - Frontend library: Thymeleaf, Webjar
 
 # High Level System Architecture
@@ -22,35 +22,28 @@
 
 # Spring Cloud Components
 
-## Eureka Server
+## Eureka Serivce Discovery Server
+- Purpose: Eureka Server holds the information about all client-service applications. Every Micro service will register into the Eureka server
 - Key Dependency: Web, Eureka Server
 - application.properties
 ```Java
 server.port = 8761
-eureka.client.registerWithEureka = false
-eureka.client.fetchRegistry = false
-```
-- Annotation
-```Java
-@SpringBootApplication
-@EnableEurekaServer
+eureka.client.registerWithEureka = false //do not register eureka self
+eureka.client.fetchRegistry = false      //do not register eureka self
 ```
 
-## Config Server
-- Utlize Git repo
+## Configuration Server
+- Purpose: Spring Cloud Configuration server provides unified configuration settings in a distributed system
+- You can save configuration file on Web(Ex:Git repo) or local storage
 - Key Dependency: Web, Config Server
 
 - application.properties
 ```Java
 server.port = 8888
 spring.cloud.config.server.git.uri = https://github.com/xplayer9/config-repo
-spring.cloud.config.server.git.default-label = main
+spring.cloud.config.server.git.default-label = main   //Code branch name in Git
 ```
-- Annotation
-```Java
-@SpringBootApplication
-@EnableConfigServer
-```
+
 - "application.yml" in Git repo
 ```Java
 my:
@@ -60,9 +53,9 @@ my:
   keyDuration: 3600
   header:
     type: Authorization
-  list:
-    value: one, two , Five, Six, Seven, Eight
-  
+  kafkatopic: json_topic
+  kafkauri: localhost:9092
+
 spring:
   datasource:
     url: jdbc:postgresql://localhost:1234/postgres
@@ -92,6 +85,19 @@ management:
   endpoint:
     health:
       show-details: always
+
+resilience4j.circuitbreaker:
+  instances:
+    processService:
+      slidingWindowSize: 5
+      permittedNumberOfCallsInHalfOpenState: 1
+      slidingWindowType: COUNT_BASED
+      minimumNumberOfCalls: 10
+      waitDurationInOpenState: 3s
+      slowCallDurationThreshold: 2s
+      failureRateThreshold: 20
+      slowCallRateThreshold: 20
+
 ```
 
 ## Gateway Server
