@@ -196,7 +196,7 @@ spring:
 
 <img width="1315" alt="Screenshot08" src="https://user-images.githubusercontent.com/48862763/159366084-d1813a36-7223-4fef-9ae3-3a6568f6670e.png">
 
-# Demo Page -- historical Stock Price
+# Demo Page -- Historical Stock Price
 
 <img width="410" alt="Screenshot07" src="https://user-images.githubusercontent.com/48862763/159366160-de483976-f1c4-4987-acb0-daff8d5a7055.png">
 
