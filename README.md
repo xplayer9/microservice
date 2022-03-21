@@ -1,5 +1,4 @@
-# Spring Boot Microservices 
-# -- Stock Price System (Real Time Quoto and Historical Price)
+# SpringBoot Microservices -- Stock Price System(Real Time Quoto and Historical Price)
 
 # High Level System Architecture
 
