@@ -9,24 +9,26 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cloud.client.ServiceInstance;
-import org.springframework.cloud.client.loadbalancer.LoadBalancerClient;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.InternalAuthenticationServiceException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.client.RestTemplate;
+
 
 import com.aaaUserApi.model.aaaUserModel;
 import com.aaaUserApi.repository.aaaUserRepository;
 import com.aaaUserApi.service.aaaUserDetailService;
+import com.aaaUserApi.service.circuitBreakerService;
 import com.aaaUserApi.util.JwtUtil;
 
 @RestController
@@ -35,22 +37,12 @@ public class aaaUserRestController {
 	@Autowired
 	aaaUserRepository rep;
 	
-	@Value("${server.port}")
-	String port;
-	
 	@Value("${my.cookieName}")
     private String COOKIE;
 	
 	@Value("${my.keyDuration}")
     private String DURATION;
 	
-	@Value("${my.header.type}")
-	private String HEADER_KEY;
-	
-	@Autowired
-    private LoadBalancerClient loadBalancerClient;
-    private RestTemplate restTemplate = new RestTemplate();
-    
     @Autowired
 	private AuthenticationManager authenticationManager;
 
@@ -60,11 +52,25 @@ public class aaaUserRestController {
 	@Autowired
 	private aaaUserDetailService userDetailsService;
 	
+	@Autowired
+	private circuitBreakerService circuitService;
+	
 	@PreAuthorize("hasRole('USER')")
 	@GetMapping("/all")
 	public String getAll(HttpServletRequest req) {
 		List<aaaUserModel> ll = rep.findAll();
 		return ll.toString();
+	}
+	
+	@PreAuthorize("hasRole('USER')")
+	@GetMapping("/test")
+	public ResponseEntity<String> getTest() {
+		StringBuilder sb = new StringBuilder();
+		for(int i=0;i<11;i++) {
+			sb.append("Test ").append(i).append(": ");
+			sb.append(circuitService.deptInfo_Timeout(99)).append("<br>");
+		}
+		return new ResponseEntity<String>(sb.toString(), HttpStatus.OK);
 	}
 	
 	@PreAuthorize("hasRole('ADMIN')")
@@ -126,4 +132,28 @@ public class aaaUserRestController {
 		resp.addCookie(cookie);
 		return "Login Successfully !!!";
 	}
+	
+	@PostMapping("/getUserDetails")
+	public String getUserDetails(@RequestBody String name) {
+		System.out.println("=== in getUserDetails: " + name);
+		UserDetails user = userDetailsService.loadUserByUsername(name);
+		return user.getUsername()+":"+user.getPassword()+":"+user.getAuthorities().toArray()[0];
+	}
+	
+	@GetMapping("/getUsername")
+	public String isJWTvalid(@RequestHeader("Authorization") String jwt) {
+		return jwtTokenUtil.extractUsername(jwt.substring(7));
+	}
+	
+	@PostMapping("/isJWTvalid")
+	public Boolean isJWTvalid(@RequestHeader("Authorization") String jwt, @RequestBody String name) {
+		return jwtTokenUtil.validateToken(jwt.substring(7), userDetailsService.loadUserByUsername(name));
+	}
 }
+
+
+
+
+
+
+

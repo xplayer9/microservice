@@ -25,7 +25,7 @@ public class aaaUserDetailService implements UserDetailsService{
 	@Override
 	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
 
-			System.out.println("=== in UserDetailService, loadUserByUsername");
+			//System.out.println("=== in UserDetailService, loadUserByUsername");
             aaaUserModel dto = rep.findByUsername(username).get();
             //set roles
             List<GrantedAuthority> list = new ArrayList<GrantedAuthority>();
