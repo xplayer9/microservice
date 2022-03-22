@@ -1,45 +1,49 @@
-# Spring Boot Microservices
+# SpringBoot Microservices -- Stock Price Services (Real Time Quoto and Historical Price)
+
+# Technology
+  - SpringBoot Architecture
+  - Spring API Gateway
+  - Configuration Server
+  - Eureka Serivce Discovery Server
+  - Kafka Message Queue
+  - Spring Cloud Security JWT
+  - Resilience4J Circuit Braker
+  - DataBase: JPA, PostgreSQL
+  - Development tools: Dev package, Lombok, Docker, Actuator
+  - Frontend library: Thymeleaf, Webjar
 
 # High Level System Architecture
 
-<img width="799" alt="Screenshot01" src="https://user-images.githubusercontent.com/48862763/157296158-a41ef82a-ed7d-43fe-9f2f-f5b0de8e7dc3.png">
+<img width="790" alt="Screenshot03" src="https://user-images.githubusercontent.com/48862763/157563209-02321dd1-4767-458b-b04c-3fd079e8e42b.png">
 
 # High Level Cloud Security Flow
 
 <img width="789" alt="Screenshot02" src="https://user-images.githubusercontent.com/48862763/157300306-1c11a2ce-f356-4803-b6f8-5b2481c99146.png">
 
-
 # Spring Cloud Components
 
-## Eureka Server
+## Eureka Serivce Discovery Server
+- Purpose: Eureka Server holds the information about all client-service applications. Every Micro service will register into the Eureka server
 - Key Dependency: Web, Eureka Server
 - application.properties
 ```Java
 server.port = 8761
-eureka.client.registerWithEureka = false
-eureka.client.fetchRegistry = false
-```
-- Annotation
-```Java
-@SpringBootApplication
-@EnableEurekaServer
+eureka.client.registerWithEureka = false //do not register eureka self
+eureka.client.fetchRegistry = false      //do not register eureka self
 ```
 
-## Config Server
-- Utlize Git repo
+## Configuration Server
+- Purpose: Spring Cloud Configuration server provides unified configuration settings in a distributed system
+- You can save configuration file on Web(Ex:Git repo) or local storage
 - Key Dependency: Web, Config Server
 
 - application.properties
 ```Java
 server.port = 8888
 spring.cloud.config.server.git.uri = https://github.com/xplayer9/config-repo
-spring.cloud.config.server.git.default-label = main
+spring.cloud.config.server.git.default-label = main   //Code branch name in Git
 ```
-- Annotation
-```Java
-@SpringBootApplication
-@EnableConfigServer
-```
+
 - "application.yml" in Git repo
 ```Java
 my:
@@ -49,9 +53,9 @@ my:
   keyDuration: 3600
   header:
     type: Authorization
-  list:
-    value: one, two , Five, Six, Seven, Eight
-  
+  kafkatopic: json_topic
+  kafkauri: localhost:9092
+
 spring:
   datasource:
     url: jdbc:postgresql://localhost:1234/postgres
@@ -81,11 +85,25 @@ management:
   endpoint:
     health:
       show-details: always
+
+resilience4j.circuitbreaker:
+  instances:
+    processService:
+      slidingWindowSize: 5
+      permittedNumberOfCallsInHalfOpenState: 1
+      slidingWindowType: COUNT_BASED
+      minimumNumberOfCalls: 10
+      waitDurationInOpenState: 3s
+      slowCallDurationThreshold: 2s
+      failureRateThreshold: 20
+      slowCallRateThreshold: 20
+
 ```
 
 ## Gateway Server
-- provides a flexible way of routing requests
-- Key Dependency: Web, WebFlux, Gateway
+- Purpose: provides a flexible way of routing requests
+- Key Dependency: Web, WebFlux, Gateway, Eureka Client
+- Support GatewayFilter and GolbalFilter
 - "application.yml"
 ```Java
 server:
@@ -112,103 +130,23 @@ spring:
           uri: lb://TRADEAPI
           predicates:
             - Path=/trade/**
-          filters: # 加上StripPrefix=1，否則轉發到後端服務時會帶上consumer字首
+          filters:
+            - StripPrefix=1
+        - id: STOCKAPI
+          uri: lb://STOCKAPI
+          predicates:
+            - Path=/stock/**
+          filters:
+            - StripPrefix=1
+        - id: DBAPI
+          uri: lb://DBAPI
+          predicates:
+            - Path=/db/**
+          filters:
             - StripPrefix=1
 ```
 
-- Gateway Global Filter
-```Java
-@Component
-public class AuthFilter implements GlobalFilter, Ordered {
-	
-	@Value("${my.cookieName}")
-    private String COOKIE;
-	
-	@Value("${my.header.type}")
-	private String HEADER_KEY;
-
-    @Override
-    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        System.out.println("=== Global filter");
-        ServerHttpRequest req = exchange.getRequest();
-        ServerHttpResponse rsp = exchange.getResponse();
-        
-        //find JWT from cookie
-        MultiValueMap<String, HttpCookie> cookieMap = req.getCookies();
-        if(cookieMap.isEmpty() || !cookieMap.containsKey(COOKIE)){
-        	rsp.setStatusCode(HttpStatus.UNAUTHORIZED);
-        	
-        	String str = "Cookie not found " + COOKIE;
-        	byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
-          DataBuffer buffer = exchange.getResponse().bufferFactory().wrap(bytes);
-        	return rsp.writeWith(Flux.just(buffer));
-        }
-
-        //add JWT to following request header
-        HttpCookie token = cookieMap.getFirst(COOKIE);
-        return chain.filter(
-                exchange.mutate().request(
-                        req.mutate()
-                        .header(HEADER_KEY, "Bearer "+token.getValue())
-                        .build()).build());
-    }
-
-    @Override
-    public int getOrder() {
-        //The smaller the value, the more priority is given to execution
-        return 1;
-    }
-}
-```
-- Gateway Filter for reference
-```Java
-@Component
-public class AuthFilter implements GatewayFilterFactory<AuthFilter.Config> {
-
-	@Override
-	public GatewayFilter apply(Config config) {
-		return ((exchange, chain) -> {
-			
-			ServerHttpRequest req = exchange.getRequest();
-			ServerHttpResponse rsp = exchange.getResponse();
-			rsp.getHeaders().set(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
-			rsp.getHeaders().set("Access-Control-Allow-Origin", "*");
-			rsp.getHeaders().set("Cache-Control", "no-cache");
-			rsp.setStatusCode(HttpStatus.UNAUTHORIZED);
-			
-			System.out.println("=== getURI: " + req.getURI());
-			System.out.println("=== getPath: " + req.getPath());
-			System.out.println("=== getLocalAddress: " + req.getLocalAddress());
-			
-			String body = "Message to user";
-			DataBuffer buffer = null;
-			try {
-				buffer = rsp.bufferFactory().wrap(body.getBytes("UTF-8"));
-			} catch (UnsupportedEncodingException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-			return chain.filter(exchange);
-            //return rsp.writeWith(Mono.just(buffer));
-		});
-	}
-
-	@Override
-	public Class<Config> getConfigClass() {
-		return Config.class;
-	}
-
-	@Override
-	public Config newConfig() {
-		Config c = new Config();
-		return c;
-	}
-
-	public static class Config {}
-}
-```
-
-## Actuator and Devtools
+## Actuator, Devtools, Lombok, Gson
 - Dependency
 ```Java
 <dependency>
@@ -220,327 +158,45 @@ public class AuthFilter implements GatewayFilterFactory<AuthFilter.Config> {
 	<artifactId>spring-boot-devtools</artifactId>
 	<optional>true</optional>
 </dependency>
+<dependency>
+	<groupId>org.projectlombok</groupId>
+	<artifactId>lombok</artifactId>
+	<optional>true</optional>
+</dependency>
+<dependency>
+    <groupId>com.google.code.gson</groupId>
+    <artifactId>gson</artifactId>
+</dependency>
 ```
 
-## Microservice sample: UserApi
+## Microservice Component APIs: UserApi
+- Purpose: To Authenticate and Authorize every incoming request, manage user account
 - Key Dependency: Web, Cloud, JPA, Config client, Eureka client, Lombok, jjwt, jaxb
-- Annotation
-```Java
-@SpringBootApplication
-@EnableEurekaClient
-```
-- application.properities
-```Java
-server.port=8081
-spring.cloud.config.uri=http://localhost:8888
-spring.cloud.config.enabled=true
-spring.cloud.config.discovery.enabled=true
-spring.application.name=userapi
-```
-- RestController Sample Code
-```Java
-@RestController
-public class aaaUserRestController {
-	
-	@Autowired
-	aaaUserRepository rep;
-	
-	@Value("${server.port}")
-	String port;
-	
-	@Value("${my.cookieName}")
-    private String COOKIE;
-	
-	@Value("${my.keyDuration}")
-    private String DURATION;
-	
-	@Value("${my.header.type}")
-	private String HEADER_KEY;
-	
-	@Autowired
-    private LoadBalancerClient loadBalancerClient;
-    private RestTemplate restTemplate = new RestTemplate();
-    
-    @Autowired
-	private AuthenticationManager authenticationManager;
 
-	@Autowired
-	private JwtUtil jwtTokenUtil;
+## Microservice Component APIs: StockApi
+- Purpose: To Handle stock info, web request for real time stock price and historical price
+- Utlize UserApi for JWT Authentication and Authorization
+- Key Dependency: Web, Cloud, Config client, Eureka client, Lombok
 
-	@Autowired
-	private aaaUserDetailService userDetailsService;
-	
-	@PreAuthorize("hasRole('USER')")
-	@GetMapping("/all")
-	public String getAll(HttpServletRequest req) {
-		List<aaaUserModel> ll = rep.findAll();
-		return ll.toString();
-	}
-	
-	@PreAuthorize("hasRole('ADMIN')")
-	@GetMapping("/admin")
-	public String getAdmin(HttpServletRequest req) {
-		return "This is Admin page";
-	}
-	
-	@GetMapping("/logout")
-	public String getlogout(HttpServletResponse resp, HttpServletRequest req) {
-		Cookie[] arry = req.getCookies();
-		for(Cookie c:arry) {
-			if(c.getName().equals(COOKIE)) {
-				System.out.println("=== Cookie found!!!");
-				c.setMaxAge(0);
-				c.setDomain("localhost");
-				c.setPath("/");
-				resp.addCookie(c);
-				break;
-			}
-		}
-		return "Logout Successfully";
-	}
-	
-	@GetMapping("/exist")
-	public Boolean exist(@RequestParam String name) {
-		Boolean found = rep.existByName(name);
-		System.out.println("=== found user:"+name +" "+ found);
-		return found;
-	}
-	
-	
-	@GetMapping("/login")
-	public String userlogin(HttpServletResponse resp, @RequestParam Map<String, String> map) {
-		System.out.println("=== user login");
-		String username = map.getOrDefault("name", "");
-		String pwd = map.getOrDefault("pwd", "");
-		if(username.length()==0 || pwd.length()==0)
-			return "Username or Password cannot be empty!!!";
-		
-		try {
-			authenticationManager.authenticate(
-				new UsernamePasswordAuthenticationToken(username, pwd));
-		}
-		catch (InternalAuthenticationServiceException e) {
-			return "Username not found";
-		}
-		catch (BadCredentialsException e) {
-			return "Incorrect password";
-		}
-		catch (Exception e) {
-			return "Login FAIL, unknown errors";
-		}
+## Microservice Component APIs: TradeApi
+- Purpose: To perform stock trading exercise
+- Utlize UserApi for JWT Authentication and Authorization
+- Key Dependency: Web, Cloud, Config client, Eureka client, Lombok
 
-		UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-		String jwt = jwtTokenUtil.generateToken(userDetails);
-		Cookie cookie = new Cookie(COOKIE, jwt);
-        cookie.setMaxAge(Integer.parseInt(DURATION));
-		resp.addCookie(cookie);
-		return "Login Successfully !!!";
-	}
-}
-```
-- Data Model sample code
-```Java
-@Entity
-@Data
-@Table(name="`users`")
-public class aaaUserModel {
-	@Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
-    @Column(name="id")
-    private Long id;
-	
-	@Column(name="username")
-    private String username;
-    
-	@Column(name="password")
-    private String password;
-	
-	@Column(name="roles")
-    private String roles;
-}
-```
+## Microservice Component APIs: DBApi
+- Purpose: To handle all database access operations
+- Utlize UserApi for JWT Authentication and Authorization
+- Key Dependency: Web, Cloud, JPA, Config client, Eureka client, Lombok
 
-- Repository sample code
-```Java
-@Repository
-public interface aaaUserRepository extends JpaRepository<aaaUserModel, Long> {
+# Functional Flow Diagram
 
-    Optional<aaaUserModel> findByUsername(String username);
-	
-    @Query(value="select exists(select 1 from users where username = :name)", nativeQuery=true)
-    Boolean existByName(String name);
-	
-    //@Query(value="select * from inventory a where a.item = :item", nativeQuery=true)
-    //List<shopModel> getItem(String item);
-}
-```
+<img width="725" alt="Screenshot05" src="https://user-images.githubusercontent.com/48862763/159364270-42a4e261-1ada-466d-8a33-a54d0dbcae72.png">
 
-- Web Security Configuration
-```Java
-@EnableWebSecurity
-@EnableGlobalMethodSecurity(prePostEnabled = true)
-public class aaaUserSecurityConfiguration extends WebSecurityConfigurerAdapter {
-	
-	@Autowired
-    private UserDetailsService userDetailsService;
-	
-	@Autowired
-	private aaaUserSecurityFilter securityfilter;
+# Demo Page -- Real Time Stock Quote
 
-	@Override 
-	protected void configure(HttpSecurity http) throws Exception {
-		http
-        .authorizeRequests()
-        .antMatchers(HttpMethod.GET, "/login", "/logout", "signup").permitAll()
-        .anyRequest().authenticated()
-        .and()
-        .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-		.and()
-        .csrf().disable();
-		
-        http.formLogin().disable();
-	http.logout().disable();
-	http.addFilterBefore(securityfilter, UsernamePasswordAuthenticationFilter.class);
-		
-    }
-	
-	@Override
-	@Bean
-	public AuthenticationManager authenticationManagerBean() throws Exception {
-	    return super.authenticationManagerBean();
-	}
-	
-	@Override
-    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
-		auth
-		.userDetailsService(userDetailsService)
-		.passwordEncoder(new BCryptPasswordEncoder());
-    }
-}
-```
+<img width="1315" alt="Screenshot08" src="https://user-images.githubusercontent.com/48862763/159366084-d1813a36-7223-4fef-9ae3-3a6568f6670e.png">
 
-- Web Security Filter
-```Java
-@Component
-public class aaaUserSecurityFilter extends OncePerRequestFilter {
-	
-	@Value("${my.header.type}")
-	private String HEADER_KEY;
+# Demo Page -- Historical Stock Price
 
-    @Autowired
-    aaaUserDetailService userDetailsService;
-
-    @Autowired
-    private JwtUtil jwtUtil;
-
-    @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
-            throws ServletException, IOException {
-
-    	//No token, no authentication
-    	if(request.getHeader(HEADER_KEY) == null) {
-    		System.out.println("=== No token, no authentication");
-    		chain.doFilter(request, response);
-    		return;
-    	}
-    	
-    	System.out.println("=== in Filter, doFilterInternal");
-    	
-    	//Remove "Bearer " substring
-        String jwtToken = request.getHeader(HEADER_KEY).substring(7);
-        String username = jwtUtil.extractUsername(jwtToken);
- 
-        if(username != null) {
-        	if(SecurityContextHolder.getContext().getAuthentication() == null) {
-        		UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-        		
-	            if(jwtUtil.validateToken(jwtToken, userDetails)){
-	                UsernamePasswordAuthenticationToken token = new UsernamePasswordAuthenticationToken(
-	                        userDetails, null, userDetails.getAuthorities());
-	                token.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-	                SecurityContextHolder.getContext().setAuthentication(token);
-	            }
-        	}
-        }
-        chain.doFilter(request, response);
-    }
-}
-```
-
-- Define UserDetailService
-```Java
-@Service
-public class aaaUserDetailService implements UserDetailsService{
-	
-	@Autowired
-	aaaUserRepository rep;
-
-	@Override
-	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-
-			System.out.println("=== in UserDetailService, loadUserByUsername");
-            aaaUserModel dto = rep.findByUsername(username).get();
-            //set roles
-            List<GrantedAuthority> list = new ArrayList<GrantedAuthority>();
-            list.add(new SimpleGrantedAuthority(dto.getRoles()));
-            
-            return new User(dto.getUsername(), dto.getPassword(), list);
-	}
-}
-```
-
-- JWT Util
-```Java
-@Component
-public class JwtUtil {
-
-	@Value("${my.secretKey}")
-    private String SECRET_KEY;
-	
-	@Value("${my.keyDuration}")
-    private String DURATION;
-
-    public String extractUsername(String token) {
-        return extractClaim(token, Claims::getSubject);
-    }
-
-    public Date extractExpiration(String token) {
-        return extractClaim(token, Claims::getExpiration);
-    }
-
-    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
-        final Claims claims = extractAllClaims(token);
-        return claimsResolver.apply(claims);
-    }
-    private Claims extractAllClaims(String token) {
-        return Jwts.parser().setSigningKey(SECRET_KEY).parseClaimsJws(token).getBody();
-    }
-
-    private Boolean isTokenExpired(String token) {
-        return extractExpiration(token).before(new Date());
-    }
-
-    public String generateToken(UserDetails userDetails) {
-        Map<String, Object> claims = new HashMap<>();
-        return createToken(claims, userDetails.getUsername());
-    }
-
-    private String createToken(Map<String, Object> claims, String subject) {
-
-        return Jwts.builder().setClaims(claims).setSubject(subject).setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + Integer.parseInt(DURATION)*1000))
-                .signWith(SignatureAlgorithm.HS256, SECRET_KEY).compact();
-    }
-
-    public Boolean validateToken(String token, UserDetails userDetails) {
-        final String username = extractUsername(token);
-        return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
-    }
-}
-
-```
-
-
-
-
+<img width="410" alt="Screenshot07" src="https://user-images.githubusercontent.com/48862763/159366160-de483976-f1c4-4987-acb0-daff8d5a7055.png">
 
