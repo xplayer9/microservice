@@ -2,7 +2,6 @@
 
 # Technology
   - SpringBoot Architecture
-  -- abc
   - Spring API Gateway
   - Configuration Server
   - Eureka Serivce Discovery Server
